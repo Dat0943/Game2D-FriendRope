@@ -1,0 +1,143 @@
+using HPC;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class FriendRopeManager : Singleton<FriendRopeManager>
+{
+    [Header("References")]
+    public PlayerController player1;
+    public PlayerController player2;
+
+    private int currentPlayerTurn = 0; // 0 = player1, 1 = player2
+
+    [Header("Player Fall")]
+    public float fallLimitY = -10f;
+    public float rescueDistance = 7f;
+    public bool player1Fell;
+    public bool player2Fell;
+
+    protected override void Awake()
+    {
+        MakeSingleton(false);
+    }
+
+    void Start()
+    {
+        // Cả hai player đều được bật script, chỉ khác ở việc ai được quyền nhảy
+        player1.enabled = true;
+        player2.enabled = true;
+        UpdateCheckIcons();
+    }
+
+    void Update()
+    {
+        if (GameManager.Ins.isEnded || !GameManager.Ins.isStarted || GameManager.Ins.isCompleted) return;
+
+        CheckFall();
+        CheckRescue();
+
+        // Cập nhật quyền điều khiển: ai đang được phép nhảy
+        UpdateActivePlayer();
+    }
+
+    void UpdateActivePlayer()
+    {
+        if (player1Fell && !player2Fell)
+        {
+            player1.canControl = false;
+            player2.canControl = true;
+            return;
+        }
+
+        if (player2Fell && !player1Fell)
+        {
+            player2.canControl = false;
+            player1.canControl = true;
+            return;
+        }
+
+        // Bình thường: chỉ người chơi theo lượt mới được điều khiển
+        player1.canControl = (currentPlayerTurn == 0);
+        player2.canControl = (currentPlayerTurn == 1);
+    }
+
+    public void OnPlayerJump(PlayerController jumpingPlayer)
+    {
+        // Khi một player nhảy, lập tức chuyển quyền cho player còn lại
+        if (jumpingPlayer == player1 && !player2Fell)
+            currentPlayerTurn = 1;
+        else if (jumpingPlayer == player2 && !player1Fell)
+            currentPlayerTurn = 0;
+
+        UpdateCheckIcons();
+    }
+
+    void CheckFall()
+    {
+        if (!player1Fell && player1.transform.position.y < fallLimitY)
+        {
+            player1.anim.SetBool("isScaring", true);
+            player1Fell = true;
+            player1.checkIcon.SetActive(false);
+        }
+
+        if (!player2Fell && player2.transform.position.y < fallLimitY)
+        {
+            player2.anim.SetBool("isScaring", true);
+            player2Fell = true;
+            player2.checkIcon.SetActive(false);
+        }
+
+        if (player1Fell && player2Fell)
+        {
+            GameManager.Ins.OnEndGame();
+            Debug.Log("Both players fell - Game Over!");
+        }
+    }
+
+    void CheckRescue()
+    {
+        // player1 cứu player2
+        if (player2Fell && !player1Fell && Vector2.Distance(player2.transform.position, player1.transform.position) <= rescueDistance)
+        {
+            if (player1.IsGrounded())
+            {
+                player2Fell = false;
+                currentPlayerTurn = 1;
+                UpdateCheckIcons();
+            }
+        }
+
+        // player2 cứu player1
+        if (player1Fell && !player2Fell && Vector2.Distance(player1.transform.position, player2.transform.position) <= rescueDistance)
+        {
+            if (player2.IsGrounded())
+            {
+                player1Fell = false;
+                currentPlayerTurn = 0;
+                UpdateCheckIcons();
+            }
+        }
+    }
+
+    void UpdateCheckIcons()
+    {
+        if (player1Fell && !player2Fell)
+        {
+            player1.checkIcon.SetActive(false);
+            player2.checkIcon.SetActive(true);
+            return;
+        }
+
+        if (player2Fell && !player1Fell)
+        {
+            player2.checkIcon.SetActive(false);
+            player1.checkIcon.SetActive(true);
+            return;
+        }
+
+        player1.checkIcon.SetActive(currentPlayerTurn == 0);
+        player2.checkIcon.SetActive(currentPlayerTurn == 1);
+    }
+}
